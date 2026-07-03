@@ -83,19 +83,29 @@ header p {
   box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.2);
 }
 
-button {
+button,
+a.btn-primary,
+a.btn-secondary {
   border: none;
   border-radius: var(--radius);
   padding: 12px 18px;
   font-size: 0.95rem;
   font-weight: 600;
+  font-family: inherit;
+  line-height: inherit;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition:
     background 0.15s,
     transform 0.1s;
 }
 
-button:active {
+button:active,
+a.btn-primary:active,
+a.btn-secondary:active {
   transform: scale(0.98);
 }
 
@@ -108,10 +118,6 @@ button:disabled {
 a.btn-primary {
   background: var(--accent);
   color: white;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .btn-primary:hover:not(:disabled),
@@ -124,10 +130,6 @@ a.btn-secondary {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .btn-secondary:hover:not(:disabled),
