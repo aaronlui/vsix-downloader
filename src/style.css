@@ -104,22 +104,34 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.btn-primary {
+.btn-primary,
+a.btn-primary {
   background: var(--accent);
   color: white;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.btn-primary:hover:not(:disabled) {
+.btn-primary:hover:not(:disabled),
+a.btn-primary:hover {
   background: var(--accent-hover);
 }
 
-.btn-secondary {
+.btn-secondary,
+a.btn-secondary {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.btn-secondary:hover:not(:disabled) {
+.btn-secondary:hover:not(:disabled),
+a.btn-secondary:hover {
   background: var(--surface-hover);
 }
 

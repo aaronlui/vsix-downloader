@@ -75,6 +75,48 @@ function render(): void {
     event.preventDefault();
     void runSearch();
   });
+
+  resultsEl.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+      "button[data-action]",
+    );
+    if (!button) {
+      return;
+    }
+
+    const action = button.dataset.action;
+    const key = button.dataset.key;
+    if (!action || !key) {
+      return;
+    }
+
+    if (action === "load-versions") {
+      const state = cardStates.get(key);
+      if (state) {
+        void loadVersions(state.summary);
+      }
+      return;
+    }
+
+    void handleCardAction(button);
+  });
+
+  resultsEl.addEventListener("change", (event) => {
+    const select = event.target as HTMLSelectElement;
+    if (!select.matches("select[data-key]")) {
+      return;
+    }
+
+    const key = select.dataset.key!;
+    const state = cardStates.get(key);
+    if (!state) {
+      return;
+    }
+
+    state.selectedVersion = select.value;
+    cardStates.set(key, state);
+    rerenderCards(getAllSummaries());
+  });
 }
 
 function renderResults(summaries: ExtensionSummary[]): void {
@@ -115,7 +157,7 @@ function renderResults(summaries: ExtensionSummary[]): void {
       const loadVersionsButton =
         hasAllVersions || state?.loadingVersions
           ? ""
-          : `<button type="button" class="btn-secondary" data-action="load-versions" data-key="${key}">获取版本列表</button>`;
+          : `<button type="button" class="btn-secondary" data-action="load-versions" data-key="${escapeAttr(key)}">获取版本列表</button>`;
 
       const versionError = state?.error
         ? `<div class="status error">${state.error}</div>`
@@ -142,8 +184,8 @@ function renderResults(summaries: ExtensionSummary[]): void {
           <div class="card-actions">
             ${versionError}
             <div class="version-row">
-              <label for="version-${key}">版本</label>
-              <select id="version-${key}" data-key="${key}" ${!hasAllVersions || state?.loadingVersions ? "disabled" : ""}>
+              <label for="version-${escapeAttr(key)}">版本</label>
+              <select id="version-${escapeAttr(key)}" data-key="${escapeAttr(key)}" ${!hasAllVersions || state?.loadingVersions ? "disabled" : ""}>
                 ${versionOptions}
               </select>
               ${loadVersionsButton}
@@ -152,44 +194,15 @@ function renderResults(summaries: ExtensionSummary[]): void {
               <input type="text" readonly value="${escapeHtml(downloadUrl)}" aria-label="下载链接" />
             </div>
             <div class="action-buttons">
-              <button type="button" class="btn-primary" data-action="download" data-key="${key}">打开下载链接</button>
-              <button type="button" class="btn-secondary" data-action="copy" data-key="${key}">复制链接</button>
-              <button type="button" class="btn-secondary" data-action="marketplace" data-key="${key}">Marketplace</button>
+              <a class="btn-primary" href="${escapeHtml(downloadUrl)}" target="_blank" rel="noopener noreferrer">打开下载链接</a>
+              <button type="button" class="btn-secondary" data-action="copy" data-key="${escapeAttr(key)}">复制链接</button>
+              <a class="btn-secondary" href="${escapeHtml(summary.marketplaceUrl)}" target="_blank" rel="noopener noreferrer">Marketplace</a>
             </div>
           </div>
         </article>
       `;
     })
     .join("");
-
-  resultsEl.querySelectorAll("select[data-key]").forEach((select) => {
-    select.addEventListener("change", (event) => {
-      const target = event.target as HTMLSelectElement;
-      const key = target.dataset.key!;
-      const state = cardStates.get(key);
-      if (!state) {
-        return;
-      }
-      state.selectedVersion = target.value;
-      cardStates.set(key, state);
-      rerenderCards(getAllSummaries());
-    });
-  });
-
-  resultsEl.querySelectorAll("button[data-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const action = (button as HTMLButtonElement).dataset.action;
-      if (action === "load-versions") {
-        const key = (button as HTMLButtonElement).dataset.key!;
-        const summary = summaries.find((s) => extensionKey(s) === key);
-        if (summary) {
-          void loadVersions(summary);
-        }
-        return;
-      }
-      void handleCardAction(button as HTMLButtonElement, summaries);
-    });
-  });
 }
 
 function getAllSummaries(): ExtensionSummary[] {
@@ -233,18 +246,15 @@ async function loadVersions(summary: ExtensionSummary): Promise<void> {
   rerenderCards(getAllSummaries());
 }
 
-async function handleCardAction(
-  button: HTMLButtonElement,
-  summaries: ExtensionSummary[],
-): Promise<void> {
+async function handleCardAction(button: HTMLButtonElement): Promise<void> {
   const key = button.dataset.key!;
   const action = button.dataset.action!;
   const state = cardStates.get(key);
-  const summary = summaries.find((s) => extensionKey(s) === key);
-  if (!state || !summary) {
+  if (!state) {
     return;
   }
 
+  const summary = state.summary;
   const selectedMeta = getSelectedVersion(state);
   const url = buildVsixDownloadUrl(
     summary.publisherName,
@@ -253,19 +263,13 @@ async function handleCardAction(
     selectedMeta?.targetPlatform,
   );
 
-  if (action === "download") {
-    window.open(url, "_blank", "noopener,noreferrer");
-    return;
-  }
-
   if (action === "copy") {
-    await navigator.clipboard.writeText(url);
-    setStatus("下载链接已复制到剪贴板");
-    return;
-  }
-
-  if (action === "marketplace") {
-    window.open(summary.marketplaceUrl, "_blank", "noopener,noreferrer");
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus("下载链接已复制到剪贴板");
+    } catch {
+      setStatus("复制失败，请手动复制链接", true);
+    }
   }
 }
 
@@ -311,6 +315,10 @@ function escapeHtml(value: string | null | undefined): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function escapeAttr(value: string): string {
+  return escapeHtml(value).replaceAll("'", "&#39;");
 }
 
 render();
