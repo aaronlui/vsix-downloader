@@ -10,6 +10,8 @@ const HEADERS = {
 const SEARCH_FLAGS = 914;
 /** 详情查询：包含全部历史版本 */
 const DETAIL_FLAGS = 402;
+/** 仅含 VersionProperties，用于从全量历史中定位最新正式版 */
+const RELEASE_LOOKUP_FLAGS = 16;
 
 export interface ExtensionVersion {
   version: string;
@@ -42,6 +44,16 @@ interface RawExtension {
   }>;
 }
 
+function isPreRelease(
+  properties: Array<{ key: string; value: string }> = [],
+): boolean {
+  return properties.some(
+    (p) =>
+      p.key === "Microsoft.VisualStudio.Code.PreRelease" &&
+      p.value === "true",
+  );
+}
+
 function getTargetPlatform(
   properties: Array<{ key: string; value: string }> = [],
 ): string {
@@ -71,6 +83,8 @@ function text(value: string | null | undefined, fallback = ""): string {
 function mapSummary(ext: RawExtension): ExtensionSummary {
   const publisherName = text(ext.publisher?.publisherName, "unknown");
   const extensionName = text(ext.extensionName, "unknown");
+  const latestRelease =
+    ext.versions.find((v) => !isPreRelease(v.properties)) ?? ext.versions[0];
   return {
     publisherName,
     extensionName,
@@ -79,16 +93,38 @@ function mapSummary(ext: RawExtension): ExtensionSummary {
     installCount: getInstallCount(ext.statistics),
     iconUrl: getIconUrl(ext.versions),
     marketplaceUrl: `https://marketplace.visualstudio.com/items?itemName=${publisherName}.${extensionName}`,
-    latestVersion: ext.versions[0]?.version ?? "",
+    latestVersion: latestRelease?.version ?? "",
   };
 }
 
 function mapVersions(ext: RawExtension): ExtensionVersion[] {
-  return ext.versions.map((v) => ({
-    version: v.version,
-    targetPlatform: getTargetPlatform(v.properties),
-    lastUpdated: v.lastUpdated,
-  }));
+  return ext.versions
+    .filter((v) => !isPreRelease(v.properties))
+    .map((v) => ({
+      version: v.version,
+      targetPlatform: getTargetPlatform(v.properties),
+      lastUpdated: v.lastUpdated,
+    }));
+}
+
+async function getLatestReleaseVersion(
+  publisherName: string,
+  extensionName: string,
+): Promise<string | undefined> {
+  const extensions = await queryExtensions(
+    [{ filterType: 7, value: `${publisherName}.${extensionName}` }],
+    RELEASE_LOOKUP_FLAGS,
+    1,
+  );
+  return extensions[0]?.versions.find((v) => !isPreRelease(v.properties))
+    ?.version;
+}
+
+function hasOnlyPreReleaseVersions(ext: RawExtension): boolean {
+  return (
+    ext.versions.length > 0 &&
+    ext.versions.every((v) => isPreRelease(v.properties))
+  );
 }
 
 async function queryExtensions(
@@ -142,7 +178,24 @@ export async function searchExtensions(
     50,
   );
 
-  return extensions.map(mapSummary);
+  // 搜索接口只返回绝对最新版；若是预发布，再查一次拿到最新正式版
+  return Promise.all(
+    extensions.map(async (ext) => {
+      const summary = mapSummary(ext);
+      if (!hasOnlyPreReleaseVersions(ext)) {
+        return summary;
+      }
+
+      const release = await getLatestReleaseVersion(
+        summary.publisherName,
+        summary.extensionName,
+      );
+      if (release) {
+        summary.latestVersion = release;
+      }
+      return summary;
+    }),
+  );
 }
 
 export async function getExtensionVersions(
